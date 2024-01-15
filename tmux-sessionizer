@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+
+if [[ $# -eq 1 ]]; then
+    selected=$1
+else
+    selected=$(find ~/kass/projects/work/ ~/kass/projects/typescript/ ~/kass/ ~/kass/projects/angular/ ~/kass/projects/github/ ~/.local/ ~/.config/ -mindepth 1 -maxdepth 1 -type d | fzf)
+fi
+
+if [[ -z $selected ]]; then
+    exit 0
+fi
+
+selected_name=$(basename "$selected" | tr . _)
+tmux_running=$(pgrep tmux)
+
+if [[ -z $TMUX ]] && [[ -z $tmux_running ]]; then
+    tmux new-session -s $selected_name -c $selected
+    exit 0
+fi
+
+if ! tmux has-session -t=$selected_name 2> /dev/null; then
+    notify-send $selected_name  
+    notify-send $selected  
+    confFiles=`ls -1 $selected/*.conf 2>/dev/null | wc -l`
+    if [[ -f "$selected/test.ts" ]]; then
+        notify-send 'test.ts.' --icon=dialog-information
+        tmux new-session -d -s $selected_name -c $selected 
+        tmux split-window -h -t $selected_name: -c $selected
+        tmux rename-window -t $selected_name:0 $selected_name 
+        tmux send-keys -t $selected_name:0.0 "nvim test.ts" Enter
+        tmux send-keys -t $selected_name:0.1 "tsc-watch test.ts --outDir ./dist --onSuccess 'node ./dist/test.js'" Enter
+        tmux resize-pane -t $selected_name:0.0 -R 20 
+        tmux select-pane -t $selected_name:0.0 
+        tmux attach-session -t $selected_name
+    elif [[ -f "$selected/package.json" ]]; then
+        notify-send 'package.json.' --icon=dialog-information
+        tmux new-session -d -s $selected_name -c $selected -n "nvim"
+        tmux new-window -t $selected_name -c $selected -n "npm"
+        tmux send-keys -t $selected_name:0 "nvim" Enter
+        tmux send-keys -t $selected_name:1 "npm start" Enter
+        tmux select-window -t $selected_name:0 
+        tmux attach-session -t $selected_name
+    elif [[ -d "$selected/worktrees" ]]; then
+        notify-send 'worktrees.' --icon=dialog-information
+        tmux new-session -d -s $selected_name -c $selected -n "nvim"
+        tmux new-window -t $selected_name -c $selected -n "npm"
+        tmux send-keys -t $selected_name:0 "nvim" Enter
+        tmux select-window -t $selected_name:0 
+        tmux attach-session -t $selected_name
+    elif [[ $confFiles != 0 ]]; then
+        notify-send '.conf.' --icon=dialog-information
+        tmux new-session -d -s $selected_name -c $selected -n "nvim"
+        tmux send-keys -t $selected_name "nvim *.conf" Enter
+        tmux attach-session -t $selected_name
+    else
+        notify-send 'nothing.' --icon=dialog-information
+        tmux new-session -d -s $selected_name -c $selected -n "nvim"
+        tmux send-keys -t $selected_name:0 "nvim" Enter
+        tmux attach-session -t $selected_name
+    fi
+fi
+
+tmux switch-client -t $selected_name
